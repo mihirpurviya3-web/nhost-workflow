@@ -1,25 +1,39 @@
-import { Request, Response } from 'express'
+export default async function handler(request: any, response: any) {
+  console.log("METHOD:", request.method)
+  console.log("BODY:", request.body)
 
-export default async function handler(req: Request, res: Response) {
-  const { workflow_id, input } = req.body
-  
+  const body = request.body ?? {}
+
+  // Support both possible request formats
+  const workflow_id =
+    body.workflow_id ??
+    body.input?.workflow_id
+
+  const input =
+    body.input?.input ??
+    body.input
+
   console.log("Workflow ID:", workflow_id)
   console.log("Input:", input)
 
   try {
-    return res.json({ 
-      success: true, 
+    return response.status(200).json({
+      success: true,
+      status: "completed",
       message: "Workflow engine chal gaya!",
-      received: {
-        workflow_id: workflow_id,
-        input: input
-      }
+      data: JSON.stringify({
+        workflow_id,
+        input
+      })
     })
   } catch (error: any) {
-    return res.status(500).json({ 
-      success: false, 
-      error: error.message 
+    return response.status(500).json({
+      success: false,
+      status: "failed",
+      message: "workflow engine failed",
+      data: JSON.stringify({
+        error: error?.message || "unknown error"
+      })
     })
   }
-}// Workflow engine ready
-// deploy check
+}
