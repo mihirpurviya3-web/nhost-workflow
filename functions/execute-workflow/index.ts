@@ -5,7 +5,6 @@ export default async function handler(request: any, response: any) {
   console.log("Workflow ID:", workflow_id)
   console.log("Input:", input)
 
-  // Validate workflow ID
   if (!workflow_id) {
     return response.status(400).json({
       success: false,
@@ -16,9 +15,11 @@ export default async function handler(request: any, response: any) {
   }
 
   try {
-    // Nhost automatically provides this environment variable
     const hasuraUrl = process.env.NHOST_GRAPHQL_URL
     const adminSecret = process.env.NHOST_ADMIN_SECRET
+
+    console.log("GraphQL URL configured:", !!hasuraUrl)
+    console.log("Admin secret configured:", !!adminSecret)
 
     if (!hasuraUrl) {
       throw new Error("NHOST_GRAPHQL_URL is not configured")
@@ -28,25 +29,15 @@ export default async function handler(request: any, response: any) {
       throw new Error("NHOST_ADMIN_SECRET is not configured")
     }
 
-    console.log("GraphQL URL configured:", !!hasuraUrl)
-    console.log("Admin secret configured:", !!adminSecret)
-
-    const query = `
-      query GetWorkflow($workflow_id: uuid!) {
-        workflows(
-          where: {
-            id: {
-              _eq: $workflow_id
+    // First: inspect the actual GraphQL query root
+    const introspectionQuery = `
+      query {
+        __schema {
+          queryType {
+            fields {
+              name
             }
           }
-        ) {
-          id
-          org_id
-          name
-          description
-          created_by
-          created_at
-          updated_at
         }
       }
     `
@@ -58,60 +49,47 @@ export default async function handler(request: any, response: any) {
         "x-hasura-admin-secret": adminSecret
       },
       body: JSON.stringify({
-        query,
-        variables: {
-          workflow_id
-        }
+        query: introspectionQuery
       })
     })
 
     const result = await graphqlResponse.json()
 
     console.log(
-      "Hasura response:",
+      "GraphQL schema response:",
       JSON.stringify(result)
     )
 
-    // GraphQL-level error
     if (result.errors) {
       return response.status(200).json({
         success: false,
         status: "failed",
-        message:
-          result.errors[0]?.message ||
-          "Hasura query failed",
-        data: null
+        message: result.errors[0]?.message || "GraphQL introspection failed",
+        data: JSON.stringify(result.errors)
       })
     }
 
-    const workflows = result.data?.workflows || []
+    const fields =
+      result.data?.__schema?.queryType?.fields || []
 
-    // Workflow does not exist
-    if (workflows.length === 0) {
-      return response.status(200).json({
-        success: false,
-        status: "failed",
-        message: "Workflow not found",
-        data: null
-      })
-    }
+    const fieldNames = fields.map((field: any) => field.name)
 
-    const workflow = workflows[0]
+    console.log("Query root fields:", fieldNames)
 
-    console.log(
-      "Workflow found:",
-      workflow.id,
-      workflow.name
-    )
+    const workflowsExists =
+      fieldNames.includes("workflows")
 
-    // Successful workflow lookup
     return response.status(200).json({
       success: true,
-      status: "completed",
-      message: "Workflow fetched successfully",
+      status: "diagnostic",
+      message: workflowsExists
+        ? "workflows field EXISTS in Function GraphQL schema"
+        : "workflows field DOES NOT EXIST in Function GraphQL schema",
       data: JSON.stringify({
-        workflow,
-        input
+        graphqlUrlConfigured: !!hasuraUrl,
+        adminSecretConfigured: !!adminSecret,
+        workflowsExists,
+        queryRootFields: fieldNames
       })
     })
 
@@ -121,9 +99,7 @@ export default async function handler(request: any, response: any) {
     return response.status(200).json({
       success: false,
       status: "failed",
-      message:
-        error?.message ||
-        "Workflow engine failed",
+      message: error?.message || "Workflow engine failed",
       data: null
     })
   }
