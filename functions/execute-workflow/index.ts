@@ -139,12 +139,15 @@ export default async function handler(request: any, response: any) {
       try {
         let output = {}
 
-        // Step 0: LLM Call
+        
+               // Step 0: LLM Call
         if (step.type === 'llm_call') {
+          const apiKey = "sk-YOUR_ACTUAL_KEY_HERE"  // 👈 APNI KEY DAALO
+          
           const openaiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
             method: 'POST',
             headers: {
-              'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+              'Authorization': `Bearer ${apiKey}`,  // 👈 YAHAN apiKey LIKHO
               'Content-Type': 'application/json'
             },
             body: JSON.stringify({
@@ -161,7 +164,7 @@ export default async function handler(request: any, response: any) {
             result: aiData.choices?.[0]?.message?.content || 'No response',
             raw: aiData 
           }
-        } 
+        }
         
         // Step 1: HTTP Request
         else if (step.type === 'http_request') {
