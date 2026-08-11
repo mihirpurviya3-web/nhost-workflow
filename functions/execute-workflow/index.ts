@@ -29,6 +29,7 @@ export default async function handler(request: any, response: any) {
           workflow_id: $workflow_id,
           trigger_type: "manual",
           input_payload: $input,
+           output_payload: {},
           status: "running"
         }) {
           id
@@ -63,12 +64,12 @@ export default async function handler(request: any, response: any) {
       query GetWorkflowSteps($workflow_id: uuid!) {
         workflow_steps(
           where: { workflow_id: { _eq: $workflow_id } }
-          order_by: { step_order: asc }
+          order_by: { position: asc }
         ) {
           id
-          step_type
-          step_config
-          step_order
+          type
+          config
+          position
         }
       }
     `
@@ -106,7 +107,7 @@ export default async function handler(request: any, response: any) {
     let context = input || {}
 
     for (const step of steps) {
-      console.log(`Executing step ${step.step_order}: ${step.step_type}`)
+      console.log(`Executing step ${step.position}: ${step.type}`)
 
       // Create step_run
       const createStepRun = `
@@ -139,7 +140,7 @@ export default async function handler(request: any, response: any) {
         let output = {}
 
         // Step 0: LLM Call
-        if (step.step_type === 'llm_call') {
+        if (step.type === 'llm_call') {
           const openaiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
             method: 'POST',
             headers: {
@@ -149,8 +150,8 @@ export default async function handler(request: any, response: any) {
             body: JSON.stringify({
               model: 'gpt-4o-mini',
               messages: [
-                { role: 'system', content: step.step_config?.system_prompt || 'You are a helpful assistant' },
-                { role: 'user', content: step.step_config?.prompt || JSON.stringify(context) }
+                { role: 'system', content: step.config?.system_prompt || 'You are a helpful assistant' },
+                { role: 'user', content: step.config?.prompt || JSON.stringify(context) }
               ]
             })
           })
@@ -163,22 +164,22 @@ export default async function handler(request: any, response: any) {
         } 
         
         // Step 1: HTTP Request
-        else if (step.step_type === 'http_request') {
-          const url = step.step_config?.url || 'https://httpbin.org/get'
-          const method = step.step_config?.method || 'GET'
+        else if (step.type === 'http_request') {
+          const url = step.config?.url || 'https://httpbin.org/get'
+          const method = step.config?.method || 'GET'
           
           const httpResponse = await fetch(url, { method })
           output = { status: httpResponse.status, body: await httpResponse.json() }
         }
         
         // Step 2: Conditional Branch
-        else if (step.step_type === 'conditional_branch') {
-          const condition = step.step_config?.condition || 'true'
+        else if (step.type === 'conditional_branch') {
+          const condition = step.config?.condition || 'true'
           output = { condition_met: true, branch: 'yes', evaluated: condition }
         }
         
         // Step 3: Approval Gate
-        else if (step.step_type === 'approval_gate') {
+        else if (step.type === 'approval_gate') {
           // Update step_run as pending
           await fetch(hasuraUrl, {
             method: "POST",
@@ -233,7 +234,7 @@ export default async function handler(request: any, response: any) {
         }
         
         // Step 4: DB Write
-        else if (step.step_type === 'db_write') {
+        else if (step.type === 'db_write') {
           const saveResult = await fetch(hasuraUrl, {
             method: "POST",
             headers: {
@@ -259,9 +260,9 @@ export default async function handler(request: any, response: any) {
         }
         
         // Step 5: Notify
-        else if (step.step_type === 'notify') {
-          console.log("NOTIFY:", step.step_config?.message || "Workflow completed")
-          output = { notified: true, channel: step.step_config?.channel || 'console' }
+        else if (step.type === 'notify') {
+          console.log("NOTIFY:", step.config?.message || "Workflow completed")
+          output = { notified: true, channel: step.config?.channel || 'console' }
         }
 
         // Mark step as completed
@@ -288,7 +289,7 @@ export default async function handler(request: any, response: any) {
         })
 
         // Pass output to next step
-        context = { ...context, [step.step_type]: output }
+        context = { ...context, [step.type]: output }
 
       } catch (stepError: any) {
         // Mark step as failed
