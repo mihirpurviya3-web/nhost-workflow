@@ -142,7 +142,7 @@ export default async function handler(request: any, response: any) {
         
                // Step 0: LLM Call
         if (step.type === 'llm_call') {
-          const apiKey = "sk-YOUR_ACTUAL_KEY_HERE"  // 👈 APNI KEY DAALO
+          const apiKey = "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"  // 👈 APNI KEY DAALO
           
           const openaiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
             method: 'POST',
