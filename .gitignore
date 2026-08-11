@@ -1,3 +1,6 @@
 .nhost
 .secrets
+<<<<<<< HEAD
 node_modules/
+=======
+>>>>>>> f2a0fd0 (Initial commit - workflow engine)
