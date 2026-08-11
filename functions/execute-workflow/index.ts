@@ -36,7 +36,7 @@ export default async function handler(request: any, response: any) {
       mutation CreateWorkflowRun($workflow_id: uuid!, $input: jsonb) {
         insert_workflow_runs_one(object: {
           workflow_id: $workflow_id,
-          trigger_type: "manual",
+          // trigger_type: "manual",
           input_payload: $input,
           status: "running"
         }) {
