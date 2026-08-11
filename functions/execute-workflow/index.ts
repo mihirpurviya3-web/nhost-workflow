@@ -5,6 +5,7 @@ export default async function handler(request: any, response: any) {
   console.log("Workflow ID:", workflow_id)
   console.log("Input:", input)
 
+  // Validate workflow ID
   if (!workflow_id) {
     return response.status(400).json({
       success: false,
@@ -15,7 +16,20 @@ export default async function handler(request: any, response: any) {
   }
 
   try {
+    // Nhost automatically provides this environment variable
     const hasuraUrl = process.env.NHOST_GRAPHQL_URL
+    const adminSecret = process.env.NHOST_ADMIN_SECRET
+
+    if (!hasuraUrl) {
+      throw new Error("NHOST_GRAPHQL_URL is not configured")
+    }
+
+    if (!adminSecret) {
+      throw new Error("NHOST_ADMIN_SECRET is not configured")
+    }
+
+    console.log("GraphQL URL configured:", !!hasuraUrl)
+    console.log("Admin secret configured:", !!adminSecret)
 
     const query = `
       query GetWorkflow($workflow_id: uuid!) {
@@ -40,7 +54,8 @@ export default async function handler(request: any, response: any) {
     const graphqlResponse = await fetch(hasuraUrl, {
       method: "POST",
       headers: {
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
+        "x-hasura-admin-secret": adminSecret
       },
       body: JSON.stringify({
         query,
@@ -52,18 +67,28 @@ export default async function handler(request: any, response: any) {
 
     const result = await graphqlResponse.json()
 
-    console.log("Hasura response:", JSON.stringify(result))
+    console.log(
+      "Hasura response:",
+      JSON.stringify(result)
+    )
 
+    // GraphQL-level error
     if (result.errors) {
-      throw new Error(
-        result.errors[0]?.message || "Hasura query failed"
-      )
+      return response.status(200).json({
+        success: false,
+        status: "failed",
+        message:
+          result.errors[0]?.message ||
+          "Hasura query failed",
+        data: null
+      })
     }
 
     const workflows = result.data?.workflows || []
 
+    // Workflow does not exist
     if (workflows.length === 0) {
-      return response.status(404).json({
+      return response.status(200).json({
         success: false,
         status: "failed",
         message: "Workflow not found",
@@ -73,6 +98,13 @@ export default async function handler(request: any, response: any) {
 
     const workflow = workflows[0]
 
+    console.log(
+      "Workflow found:",
+      workflow.id,
+      workflow.name
+    )
+
+    // Successful workflow lookup
     return response.status(200).json({
       success: true,
       status: "completed",
@@ -82,13 +114,16 @@ export default async function handler(request: any, response: any) {
         input
       })
     })
+
   } catch (error: any) {
     console.error("Workflow error:", error)
 
-    return response.status(500).json({
+    return response.status(200).json({
       success: false,
       status: "failed",
-      message: error?.message || "Workflow engine failed",
+      message:
+        error?.message ||
+        "Workflow engine failed",
       data: null
     })
   }
