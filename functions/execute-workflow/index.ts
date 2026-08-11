@@ -5,13 +5,92 @@ export default async function handler(request: any, response: any) {
   console.log("Workflow ID:", workflow_id)
   console.log("Input:", input)
 
-  return response.status(200).json({
-    success: true,
-    status: "completed",
-    message: "Step 1: workflow request received",
-    data: JSON.stringify({
-      workflow_id,
-      input
+  if (!workflow_id) {
+    return response.status(400).json({
+      success: false,
+      status: "failed",
+      message: "workflow_id is required",
+      data: null
     })
-  })
+  }
+
+  try {
+    const hasuraUrl =
+      "https://ymhnyowghbcmelbaloer.graphql.eu-central-1.nhost.run/v1"
+
+    const query = `
+      query GetWorkflow($workflow_id: uuid!) {
+        workflows(
+          where: {
+            id: {
+              _eq: $workflow_id
+            }
+          }
+        ) {
+          id
+          org_id
+          name
+          description
+          created_by
+          created_at
+          updated_at
+        }
+      }
+    `
+
+    const graphqlResponse = await fetch(hasuraUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        query,
+        variables: {
+          workflow_id
+        }
+      })
+    })
+
+    const result = await graphqlResponse.json()
+
+    console.log("Hasura response:", JSON.stringify(result))
+
+    if (result.errors) {
+      throw new Error(
+        result.errors[0]?.message || "Hasura query failed"
+      )
+    }
+
+    const workflows = result.data?.workflows || []
+
+    if (workflows.length === 0) {
+      return response.status(404).json({
+        success: false,
+        status: "failed",
+        message: "Workflow not found",
+        data: null
+      })
+    }
+
+    const workflow = workflows[0]
+
+    return response.status(200).json({
+      success: true,
+      status: "completed",
+      message: "Workflow fetched successfully",
+      data: JSON.stringify({
+        workflow,
+        input
+      })
+    })
+  } catch (error: any) {
+    console.error("Workflow error:", error)
+
+    return response.status(500).json({
+      success: false,
+      status: "failed",
+      message: error?.message || "Workflow engine failed",
+      data: null
+    })
+  }
 }
