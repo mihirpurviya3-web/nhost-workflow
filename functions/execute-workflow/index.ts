@@ -140,31 +140,30 @@ export default async function handler(request: any, response: any) {
         let output = {}
 
         
-               // Step 0: LLM Call
+                 // Step 0: LLM Call
         if (step.type === 'llm_call') {
-          const apiKey = "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"  // 👈 APNI KEY DAALO
+          const geminiKey = "AIza-YOUR_ACTUAL_GEMINI-KEY"  // 👈 APNI GEMINI KEY DAALO
           
-          const openaiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+          const geminiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`, {
             method: 'POST',
             headers: {
-              'Authorization': `Bearer ${apiKey}`,  // 👈 YAHAN apiKey LIKHO
               'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-              model: 'gpt-4o-mini',
-              messages: [
-                { role: 'system', content: step.config?.system_prompt || 'You are a helpful assistant' },
-                { role: 'user', content: step.config?.prompt || JSON.stringify(context) }
-              ]
+              contents: [{
+                parts: [{
+                  text: step.config?.prompt || JSON.stringify(context)
+                }]
+              }]
             })
           })
 
-          const aiData = await openaiResponse.json()
+          const aiData = await geminiResponse.json()
           output = { 
-            result: aiData.choices?.[0]?.message?.content || 'No response',
+            result: aiData.candidates?.[0]?.content?.parts?.[0]?.text || 'No response',
             raw: aiData 
           }
-        }
+        }  
         
         // Step 1: HTTP Request
         else if (step.type === 'http_request') {
