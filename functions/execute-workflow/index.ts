@@ -18,9 +18,6 @@ export default async function handler(request: any, response: any) {
     const hasuraUrl = process.env.NHOST_GRAPHQL_URL
     const adminSecret = process.env.NHOST_ADMIN_SECRET
 
-    console.log("GraphQL URL configured:", !!hasuraUrl)
-    console.log("Admin secret configured:", !!adminSecret)
-
     if (!hasuraUrl) {
       throw new Error("NHOST_GRAPHQL_URL is not configured")
     }
@@ -29,15 +26,22 @@ export default async function handler(request: any, response: any) {
       throw new Error("NHOST_ADMIN_SECRET is not configured")
     }
 
-    // First: inspect the actual GraphQL query root
-    const introspectionQuery = `
-      query {
-        __schema {
-          queryType {
-            fields {
-              name
+    const query = `
+      query GetWorkflow($workflow_id: uuid!) {
+        workflows(
+          where: {
+            id: {
+              _eq: $workflow_id
             }
           }
+        ) {
+          id
+          org_id
+          name
+          description
+          created_by
+          created_at
+          updated_at
         }
       }
     `
@@ -49,57 +53,61 @@ export default async function handler(request: any, response: any) {
         "x-hasura-admin-secret": adminSecret
       },
       body: JSON.stringify({
-        query: introspectionQuery
+        query,
+        variables: {
+          workflow_id
+        }
       })
     })
 
     const result = await graphqlResponse.json()
 
     console.log(
-      "GraphQL schema response:",
+      "Hasura response:",
       JSON.stringify(result)
     )
 
     if (result.errors) {
-      return response.status(200).json({
+      throw new Error(
+        result.errors[0]?.message ||
+          "Hasura query failed"
+      )
+    }
+
+    const workflows = result.data?.workflows || []
+
+    if (workflows.length === 0) {
+      return response.status(404).json({
         success: false,
         status: "failed",
-        message: result.errors[0]?.message || "GraphQL introspection failed",
-        data: JSON.stringify(result.errors)
+        message: "Workflow not found",
+        data: null
       })
     }
 
-    const fields =
-      result.data?.__schema?.queryType?.fields || []
-
-    const fieldNames = fields.map((field: any) => field.name)
-
-    console.log("Query root fields:", fieldNames)
-
-    const workflowsExists =
-      fieldNames.includes("workflows")
+    const workflow = workflows[0]
 
     return response.status(200).json({
       success: true,
-      status: "diagnostic",
-      message: workflowsExists
-        ? "workflows field EXISTS in Function GraphQL schema"
-        : "workflows field DOES NOT EXIST in Function GraphQL schema",
+      status: "completed",
+      message: "Workflow fetched successfully",
       data: JSON.stringify({
-        graphqlUrlConfigured: !!hasuraUrl,
-        adminSecretConfigured: !!adminSecret,
-        workflowsExists,
-        queryRootFields: fieldNames
+        workflow,
+        input
       })
     })
-
   } catch (error: any) {
-    console.error("Workflow error:", error)
+    console.error(
+      "Workflow error:",
+      error
+    )
 
-    return response.status(200).json({
+    return response.status(500).json({
       success: false,
       status: "failed",
-      message: error?.message || "Workflow engine failed",
+      message:
+        error?.message ||
+        "Workflow engine failed",
       data: null
     })
   }
