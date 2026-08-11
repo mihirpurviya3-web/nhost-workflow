@@ -15,8 +15,7 @@ export default async function handler(request: any, response: any) {
   }
 
   try {
-    const hasuraUrl =
-      "https://ymhnyowghbcmelbaloer.graphql.eu-central-1.nhost.run/v1"
+    const hasuraUrl = process.env.NHOST_GRAPHQL_URL
 
     const query = `
       query GetWorkflow($workflow_id: uuid!) {
