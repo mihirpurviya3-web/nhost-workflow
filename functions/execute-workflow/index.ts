@@ -17,9 +17,14 @@ export default async function handler(request: any, response: any) {
   try {
     const hasuraUrl = process.env.NHOST_GRAPHQL_URL
     const adminSecret = process.env.NHOST_ADMIN_SECRET
+    const geminiKey = process.env.GEMINI_API_KEY
 
     if (!hasuraUrl || !adminSecret) {
       throw new Error("Hasura URL or Admin Secret not configured")
+    }
+
+    if (!geminiKey) {
+      throw new Error("GEMINI_API_KEY environment variable not configured")
     }
 
     // 1. Create workflow_run WITH tracking columns
@@ -142,8 +147,6 @@ export default async function handler(request: any, response: any) {
         
                  // Step 0: LLM Call
         if (step.type === 'llm_call') {
-          const geminiKey = "AIza-YOUR_ACTUAL_GEMINI-KEY"  // 👈 APNI GEMINI KEY DAALO
-          
           const geminiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`, {
             method: 'POST',
             headers: {
