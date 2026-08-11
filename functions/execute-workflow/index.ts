@@ -4,10 +4,8 @@ export default async function handler(request: any, response: any) {
 
   console.log("Workflow ID:", workflow_id)
   console.log("Input:", input)
-  console.log("API Key configured:", !!process.env.OPENAI_API_KEY)
 
   if (!workflow_id) {
-    console.log("Workflow ID is required")
     return response.status(400).json({
       success: false,
       status: "failed",
@@ -20,23 +18,16 @@ export default async function handler(request: any, response: any) {
     const hasuraUrl = process.env.NHOST_GRAPHQL_URL
     const adminSecret = process.env.NHOST_ADMIN_SECRET
 
-    console.log("Hasura URL configured:", !!hasuraUrl)
-    console.log("Admin secret configured:", !!adminSecret)
-
-    if (!hasuraUrl) {
-      throw new Error("NHOST_GRAPHQL_URL is not configured")
+    if (!hasuraUrl || !adminSecret) {
+      throw new Error("Hasura URL or Admin Secret not configured")
     }
 
-    if (!adminSecret) {
-      throw new Error("NHOST_ADMIN_SECRET is not configured")
-    }
-
-    // 1. Create workflow_run record
+    // 1. Create workflow_run WITH tracking columns
     const createRunMutation = `
       mutation CreateWorkflowRun($workflow_id: uuid!, $input: jsonb) {
         insert_workflow_runs_one(object: {
           workflow_id: $workflow_id,
-          // trigger_type: "manual",
+          trigger_type: "manual",
           input_payload: $input,
           status: "running"
         }) {
@@ -53,7 +44,7 @@ export default async function handler(request: any, response: any) {
       },
       body: JSON.stringify({
         query: createRunMutation,
-        variables: {
+        variables: { 
           workflow_id,
           input: input || {}
         }
@@ -67,7 +58,7 @@ export default async function handler(request: any, response: any) {
     const run_id = runResult.data.insert_workflow_runs_one.id
     console.log("Created workflow run:", run_id)
 
-    // 2. Fetch workflow steps from database
+    // 2. Fetch workflow steps
     const stepsQuery = `
       query GetWorkflowSteps($workflow_id: uuid!) {
         workflow_steps(
@@ -94,8 +85,6 @@ export default async function handler(request: any, response: any) {
       })
     }).then(r => r.json())
 
-    console.log("Hasura steps response:", JSON.stringify(stepsResult))
-
     if (stepsResult.errors) {
       throw new Error(stepsResult.errors[0]?.message || "Failed to fetch steps")
     }
@@ -119,12 +108,12 @@ export default async function handler(request: any, response: any) {
     for (const step of steps) {
       console.log(`Executing step ${step.step_order}: ${step.step_type}`)
 
-      // Create step_run record
+      // Create step_run
       const createStepRun = `
-        mutation CreateStepRun($run_id: uuid!, $step_id: uuid!) {
+        mutation CreateStepRun($workflow_run_id: uuid!, $workflow_step_id: uuid!) {
           insert_step_runs_one(object: {
-            run_id: $run_id,
-            step_id: $step_id,
+            workflow_run_id: $workflow_run_id,
+            workflow_step_id: $workflow_step_id,
             status: "running"
           }) {
             id
@@ -140,7 +129,7 @@ export default async function handler(request: any, response: any) {
         },
         body: JSON.stringify({
           query: createStepRun,
-          variables: { run_id, step_id: step.id }
+          variables: { workflow_run_id: run_id, workflow_step_id: step.id }
         })
       }).then(r => r.json())
 
@@ -199,21 +188,20 @@ export default async function handler(request: any, response: any) {
             },
             body: JSON.stringify({
               query: `
-                mutation UpdateStepRun($id: uuid!, $status: String!, $output: jsonb) {
-                  update_step_runs_by_pk(pk_columns: {id: $id}, _set: {status: $status, output_payload: $output}) {
+                mutation UpdateStepRun($id: uuid!, $status: String!) {
+                  update_step_runs_by_pk(pk_columns: {id: $id}, _set: {status: $status}) {
                     id
                   }
                 }
               `,
               variables: {
                 id: step_run_id,
-                status: "pending_approval",
-                output: { status: "awaiting approval" }
+                status: "pending_approval"
               }
             })
           })
 
-          // Update workflow_run as awaiting_approval
+          // Update workflow_run as awaiting_approval WITH output
           await fetch(hasuraUrl, {
             method: "POST",
             headers: {
@@ -222,15 +210,16 @@ export default async function handler(request: any, response: any) {
             },
             body: JSON.stringify({
               query: `
-                mutation UpdateWorkflowRun($id: uuid!, $status: String!) {
-                  update_workflow_runs_by_pk(pk_columns: {id: $id}, _set: {status: $status}) {
+                mutation UpdateWorkflowRun($id: uuid!, $status: String!, $output: jsonb) {
+                  update_workflow_runs_by_pk(pk_columns: {id: $id}, _set: {status: $status, output_payload: $output}) {
                     id
                   }
                 }
               `,
               variables: {
                 id: run_id,
-                status: "awaiting_approval"
+                status: "awaiting_approval",
+                output: context
               }
             })
           })
@@ -285,7 +274,7 @@ export default async function handler(request: any, response: any) {
           body: JSON.stringify({
             query: `
               mutation UpdateStepRun($id: uuid!, $status: String!, $output: jsonb) {
-                update_step_runs_by_pk(pk_columns: {id: $id}, _set: {status: $status, output_payload: $output, completed_at: "now()"}) {
+                update_step_runs_by_pk(pk_columns: {id: $id}, _set: {status: $status, output: $output}) {
                   id
                 }
               }
@@ -312,7 +301,7 @@ export default async function handler(request: any, response: any) {
           body: JSON.stringify({
             query: `
               mutation UpdateStepRun($id: uuid!, $status: String!, $error: String) {
-                update_step_runs_by_pk(pk_columns: {id: $id}, _set: {status: $status, error_message: $error}) {
+                update_step_runs_by_pk(pk_columns: {id: $id}, _set: {status: $status, error: $error}) {
                   id
                 }
               }
@@ -329,7 +318,7 @@ export default async function handler(request: any, response: any) {
       }
     }
 
-    // All steps completed
+    // All steps completed — Save final output
     await fetch(hasuraUrl, {
       method: "POST",
       headers: {
@@ -339,7 +328,7 @@ export default async function handler(request: any, response: any) {
       body: JSON.stringify({
         query: `
           mutation UpdateWorkflowRun($id: uuid!, $status: String!, $output: jsonb) {
-            update_workflow_runs_by_pk(pk_columns: {id: $id}, _set: {status: $status, output_payload: $output, completed_at: "now()"}) {
+            update_workflow_runs_by_pk(pk_columns: {id: $id}, _set: {status: $status, output_payload: $output}) {
               id
             }
           }
