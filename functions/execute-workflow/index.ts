@@ -363,4 +363,4 @@ export default async function handler(request: any, response: any) {
       data: null
     })
   }
-}
+}// reload env
