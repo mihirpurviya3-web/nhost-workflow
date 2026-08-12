@@ -140,39 +140,44 @@ export default async function handler(request: any, response: any) {
       try {
         let output = {}
 
-        // Step 0: LLM Call (GEMINI via env var)
-        if (step.type === 'llm_call') {
-          const geminiKey = process.env.GEMINI_API_KEY
+        // Step 0: LLM Call (OpenAI via env var)
+if (step.type === 'llm_call') {
+  const openaiKey = process.env.OPENAI_API_KEY
 
-          if (!geminiKey) {
-            throw new Error("GEMINI_API_KEY not configured in environment variables")
-          }
+  if (!openaiKey) {
+    throw new Error("OPENAI_API_KEY not configured in environment variables")
+  }
 
-          const geminiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-              contents: [{
-                parts: [{
-                  text: step.config?.prompt || JSON.stringify(context)
-                }]
-              }]
-            })
-          })
+  const prompt = step.config?.prompt || JSON.stringify(context)
 
-          const aiData = await geminiResponse.json()
-
-          if (aiData.error) {
-            throw new Error(`Gemini API error: ${aiData.error.message}`)
-          }
-
-          output = {
-            result: aiData.candidates?.[0]?.content?.parts?.[0]?.text || 'No response',
-            raw: aiData
-          }
+  const openaiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${openaiKey}`
+    },
+    body: JSON.stringify({
+      model: step.config?.model || 'gpt-4o-mini',
+      messages: [
+        {
+          role: 'user',
+          content: prompt
         }
+      ]
+    })
+  })
+
+  const aiData = await openaiResponse.json()
+
+  if (!openaiResponse.ok || aiData.error) {
+    throw new Error(`OpenAI API error: ${aiData.error?.message || 'Request failed'}`)
+  }
+
+  output = {
+    result: aiData.choices?.[0]?.message?.content || 'No response',
+    raw: aiData
+  }
+}
 
         // Step 1: HTTP Request
         else if (step.type === 'http_request') {
@@ -253,6 +258,7 @@ return response.status(200).json({
     openaiConfigured: !!openaiKey
   }
 });
+
 
         // Step 4: DB Write
         else if (step.type === 'db_write') {
