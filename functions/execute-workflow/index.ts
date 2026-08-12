@@ -379,15 +379,12 @@
 export default async function handler(request: any, response: any) {
   const testSecret = process.env.TEST_WORKFLOW_SECRET
 
-  console.log(
-    "TEST_WORKFLOW_SECRET configured:",
-    !!testSecret
-  )
+  console.log("TEST_WORKFLOW_SECRET configured:", !!testSecret)
 
   return response.status(200).json({
     success: true,
     status: "diagnostic",
-    message: "Secret runtime test",
+    message: "Custom secret runtime test",
     data: {
       configured: !!testSecret
     }
