@@ -376,17 +376,25 @@
 
 ////new test code
 
-export default async function handler(request: any, response: any) {
-  const testSecret = process.env.TEST_WORKFLOW_SECRET
+declare const process: { env: Record<string, string | undefined> };
 
-  console.log("TEST_WORKFLOW_SECRET configured:", !!testSecret)
+export default async function handler(request: any, response: any) {
+  const adminSecret = process.env.NHOST_ADMIN_SECRET
+  const graphqlUrl = process.env.NHOST_GRAPHQL_URL
+  const customSecret = process.env.TEST_WORKFLOW_SECRET
+
+  console.log("NHOST_ADMIN_SECRET:", !!adminSecret)
+  console.log("NHOST_GRAPHQL_URL:", !!graphqlUrl)
+  console.log("TEST_WORKFLOW_SECRET:", !!customSecret)
 
   return response.status(200).json({
     success: true,
     status: "diagnostic",
-    message: "Custom secret runtime test",
+    message: "Environment runtime test",
     data: {
-      configured: !!testSecret
+      nhostAdminSecret: !!adminSecret,
+      nhostGraphqlUrl: !!graphqlUrl,
+      customSecret: !!customSecret
     }
   })
 }
