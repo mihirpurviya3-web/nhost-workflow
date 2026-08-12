@@ -379,13 +379,13 @@
 declare const process: { env: Record<string, string | undefined> };
 
 export default async function handler(request: any, response: any) {
-  const adminSecret = process.env.NHOST_ADMIN_SECRET
-  const graphqlUrl = process.env.NHOST_GRAPHQL_URL
-  const customSecret = process.env.TEST_WORKFLOW_SECRET
+  const adminSecret = process.env.OPENAI_API_KEY
+  const graphqlUrl = process.env.OPENAI_API_KEY
+  const customSecret = process.env.OPENAI_API_KEY
 
-  console.log("NHOST_ADMIN_SECRET:", !!adminSecret)
-  console.log("NHOST_GRAPHQL_URL:", !!graphqlUrl)
-  console.log("TEST_WORKFLOW_SECRET:", !!customSecret)
+  console.log("OPENAI_API_KEY:", !!adminSecret)
+  console.log("OPENAI_API_KEY:", !!graphqlUrl)
+  console.log("OPENAI_API_KEY:", !!customSecret)
 
   return response.status(200).json({
     success: true,
