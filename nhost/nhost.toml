@@ -210,3 +210,23 @@ adminPassword = '{{ secrets.GRAFANA_ADMIN_PASSWORD }}'
 enabled = false
 
 [observability.grafana.contacts]
+
+
+python3 - <<'PY'
+from pathlib import Path
+
+path = Path("nhost/nhost.toml")
+text = path.read_text()
+
+old = "[global]\n"
+new = """[global]
+
+[[global.environment]]
+name = 'OPENAI_API_KEY'
+value = '{{ secrets.OPENAI_API_KEY }}'
+"""
+
+if "[[global.environment]]" not in text:
+    text = text.replace(old, new, 1)
+    path.write_text(text)
+PY
