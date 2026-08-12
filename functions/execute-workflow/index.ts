@@ -243,6 +243,16 @@ export default async function handler(request: any, response: any) {
             data: JSON.stringify({ run_id, step_id: step.id, context })
           })
         }
+        const openaiKey = process.env.OPENAI_API_KEY;
+
+return response.status(200).json({
+  success: true,
+  status: "diagnostic",
+  message: "Cloud OpenAI secret test",
+  data: {
+    openaiConfigured: !!openaiKey
+  }
+});
 
         // Step 4: DB Write
         else if (step.type === 'db_write') {
